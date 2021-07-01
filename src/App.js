@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import "./App.css";
-import { API } from "aws-amplify";
+import { API, Storage } from "aws-amplify";
 import { withAuthenticator, AmplifySignOut } from "@aws-amplify/ui-react";
 import { listTodos } from "./graphql/queries";
 import {
@@ -8,28 +8,43 @@ import {
   deleteTodo as deleteNoteMutation,
 } from "./graphql/mutations";
 
-const initialFromState = { name: "", description: "" };
+const initialFromState = { name: "", description: "", video: "" };
 
 function App() {
   const [notes, setNotes] = useState([]);
   const [formData, setFormData] = useState(initialFromState);
 
   useEffect(() => {
+    console.log(formData);
     fetchNotes();
   }, []);
 
   async function fetchNotes() {
     const apiData = await API.graphql({ query: listTodos });
     console.log(apiData);
+    const notesFromAPI = apiData.data.listTodos.items;
+    await Promise.all(
+      notesFromAPI.map(async (note) => {
+        if (note.image) {
+          const image = await Storage.get(note.image);
+          note.image = image;
+        }
+        return note;
+      })
+    );
     setNotes(apiData.data.listTodos.items);
   }
 
   async function createNote() {
-    if (!formData.name || !formData.description) return;
+    if (!formData.name || !formData.description || !formData.video) return;
     await API.graphql({
       query: createNoteMutation,
       variables: { input: formData },
     });
+    if (formData.image) {
+      const image = await Storage.get(formData.image);
+      formData.image = image;
+    }
     setNotes([...notes, formData]);
     setFormData(initialFromState);
   }
@@ -41,6 +56,14 @@ function App() {
       query: deleteNoteMutation,
       variables: { input: { id } },
     });
+  }
+
+  async function onChange(e) {
+    if (!e.target.files[0]) return;
+    const file = e.target.files[0];
+    setFormData({ ...formData, image: file.name });
+    await Storage.put(file.name, file);
+    fetchNotes();
   }
 
   return (
@@ -58,6 +81,12 @@ function App() {
         placeholder="Note description"
         value={formData.description}
       />
+      <input
+        onChange={(e) => setFormData({ ...formData, video: e.target.value })}
+        placeholder="Video link"
+        value={formData.video}
+      />
+      <input type="file" onChange={onChange} />
       <button onClick={createNote}>Create Note</button>
       <div style={{ marginBottom: 30 }}>
         {notes.map((note) => (
@@ -65,6 +94,15 @@ function App() {
             <h2>{note.name}</h2>
             <p>{note.description}</p>
             <button onClick={() => deleteNote(note)}>Delete note</button>
+            {note.image && <img src={note.image} style={{ width: 400 }} />}
+            {note.video && (
+              <iframe
+                src={note.video}
+                width="280"
+                height="257"
+                title="Exemplo"
+              />
+            )}
           </div>
         ))}
       </div>
