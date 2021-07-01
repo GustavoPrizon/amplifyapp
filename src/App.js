@@ -36,7 +36,7 @@ function App() {
   }
 
   async function createNote() {
-    if (!formData.name || !formData.description || !formData.video) return;
+    if (!formData.name || !formData.description) return;
     await API.graphql({
       query: createNoteMutation,
       variables: { input: formData },
